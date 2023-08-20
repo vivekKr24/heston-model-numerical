@@ -1,4 +1,3 @@
-from cmath import exp, log as ln, sqrt
 import scipy.integrate as integrate
 import numpy as np
 
@@ -9,10 +8,10 @@ class Stock:
 
 
 class Option:
-    def __init__(self, strike, underlying, expiry):
+    def __init__(self, strike, underlying: Stock, expiry):
         self.strike = strike
         self.expiry = expiry
-        self.underlying = underlying
+        self.underlying: Stock = underlying
 
 
 class HestonModel:
@@ -26,67 +25,59 @@ class HestonModel:
         self.option = None
         self.r = r
 
-    def characteristic_function(self, w, t=None):
-        K = self.option.strike
-        a = ((- w ** 2) / 2) - (1j * w / 2)
-        b = self.kappa - self.rho * self.n * w * 1j
-        gamma = self.n ** 2 / 2
 
-        h = sqrt(b ** 2 - 4 * a * gamma)
-        r_minus = (b - h) / (self.n ** 2)
-        r_plus = (b + h) / (self.n ** 2)
+    def alpha(self, j, u):
+        k = self.kappa
+        a = -1/2
+        a *= u ** 2
+        a += -1j * u / 2 + j * 1j * u * j
+
+        return a
+
+    def beta(self, j, u):
+        return self.kappa - self.rho * self.n * j - self.rho * self.n * 1j * u
+
+    def integrand(self, j, u, t, v):
+        x = np.log(self.option.underlying.spot * np.exp(self.r * self.option.expiry) / self.option.strike)
+
+        alpha = self.alpha(j, u)
+        beta = self.beta(j, u)
+        gamma = self.n ** 2
+        gamma /= 2
+
+        d = beta ** 2 - 4 * alpha * gamma
+        d = np.sqrt(d)
+
+        r_minus = beta - d
+        r_minus /= self.n ** 2
+
+        r_plus = beta + d
+        r_plus /= self.n ** 2
 
         g = r_minus / r_plus
 
-        def neg_exp_ht(t): return exp(- h * t)
+        def C(t):
+            return self.kappa * (r_minus * t - (2 / self.n ** 2) * np.log((1 - g * np.exp(-d * t)) / (1 - g)))
 
-        def l(t): return 1 - g * neg_exp_ht(t)
+        def D(t):
+            return r_minus * ((1 - np.exp(-d * t)) / (1 - g * np.exp(-d * t)))
 
-        def C(w, t): return self.kappa * (r_minus * t - 2 / (self.n ** 2) * (ln((l(t)) / (1 - g))))
+        return (np.exp(C(t) * self.theta + D(t) * v + 1j * u * x) / (1j * u)).real
 
-        def D(w, t): return r_minus * (1 - neg_exp_ht(t)) / (l(t))
+    def P(self, j, t, v):
+        p = 1 / np.pi
+        integral = integrate.nquad(lambda u: self.integrand(j, u, t, v), [[0, np.inf]])
+        # integral = integrate.quad(lambda u: self.integrand(j, u, t, v), 0, np.inf, limit=50)
+        p *= integral[0]
 
-        S0 = self.option.underlying.spot
-
-        if not t:
-            t = self.option.expiry
-
-        return exp(C(w, t) * self.theta + D(w, t) * self.vol_initial + 1j * w * ln(S0 * exp(self.r * t) / K))
-
-    def P0(self):
-        p0 = 1 / 2
-
-        def integrand(w):
-            K = self.option.strike
-            I = (exp(-1j * w * ln(K)) * self.characteristic_function(w - 1j))
-            I /= (1j * w * self.characteristic_function(-1j))
-            return I.real
-
-        integral = integrate.quad(lambda w: integrand(w), 0, np.inf)[0]
-
-        p0 += 1 / np.pi * integral
-
-        return p0
-
-    def P1(self):
-        p1 = 1/2
-
-        def integrand(w):
-            K = self.option.underlying.spot
-            I = (exp(-1j * w * ln(K)) * self.characteristic_function(w))
-            I /= (1j * w)
-
-            return I.real
-
-        integral = integrate.quad(lambda w: integrand(w), 0, np.inf)[0]
-
-        p1 += 1 / np.pi * integral
-        return p1
+        return p + 0.5
 
     def price(self, option: Option):
         self.option = option
+        x = np.log(self.option.underlying.spot * np.exp(self.r * self.option.expiry) / self.option.strike)
         S0 = option.underlying.spot
         K = option.strike
         T = option.expiry
+        var = self.vol_initial
 
-        return S0 * self.P0() - exp(-self.r * T) * K * self.P1()
+        return K * (np.exp(x) * self.P(1, T, var) - self.P(0, T, var))
