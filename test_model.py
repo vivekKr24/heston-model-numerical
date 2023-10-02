@@ -8,44 +8,15 @@ r = 0.072
 # model = HestonModel(0.73, -0.88, 4, 0.1, 0.01, r)
 model = HestonModel(0.61, -0.7, 6.21, 0.019, 0.010201, r)
 
-
 price = model.price(Option(1520, Stock(1590), 0.05))
 print("Price of option is " + str(price.real))
+
 
 #  Implied vol
 
 def call_price_Put_Call_Parity(put_option, put_price, T):
     C = put_price + option.underlying.spot - option.strike * np.exp(-r * T)
     return C
-
-
-def implied_vol(option_price, option):
-    vol_high = 1.0
-    vol_low = 0.0
-    while vol_high - vol_low >= 0.00001:
-        vol = vol_high + vol_low
-        vol /= 2
-
-        call_price = 0
-        # if option.underlying.spot - option.strike > 0:
-        call_price = BS_CALL(option.underlying.spot, option.strike, option.expiry, r, vol)
-        # else:
-        #     put_price = BS_PUT(option.underlying.spot, option.strike, option.expiry, r, vol)
-        #     call_price = call_price_Put_Call_Parity(option, put_price, option.expiry)
-
-        if call_price > option_price:
-            vol_high = vol - 0.000001
-        elif call_price < option_price:
-            vol_low = vol + 0.000001
-        else:
-            return vol
-
-    vol = vol_high + vol_low
-    vol /= 2
-
-    if vol == 0:
-        print("CHECK")
-    return vol
 
 
 def plot_vol_surface():
@@ -56,7 +27,7 @@ def plot_vol_surface():
         for K in range(950, 1250, 10):
             option = Option(K, stock, T / 50)
             price = model.price(option)
-            iv = implied_vol(price, option)
+            iv = implied_vol(price, option, r)
 
             if iv < 0.05:
                 continue
@@ -66,14 +37,16 @@ def plot_vol_surface():
 
     fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
     surf1 = ax.plot_trisurf([t / 10 for t in time_to_maturity], strikes, [np.abs(iv) for iv in IV],
-                           linewidth=0.1, antialiased=False)
+                            linewidth=0.1, antialiased=False)
     surf2 = ax.plot_trisurf([t / 10 for t in time_to_maturity], strikes, [np.abs(iv) for iv in IV],
-                        linewidth=0.1, antialiased=True, cmap='hot')
+                            linewidth=0.1, antialiased=True, cmap='hot')
     # ax.scatter(time_to_maturity, strikes, np.array(IV))
 
     fig.colorbar(surf1, shrink=0.5, aspect=5)
     # plt.show()
     plt.savefig("IMPLIED_VOLATILITY_SURFACE")
+
+
 # IV vs Time to Maturity
 
 # def price_vs_K():
@@ -174,6 +147,7 @@ plot_vol_surface()
 
 plot_logKS_vs_IV(0.1)
 
+
 def plot_price_vs_kappa():
     KAPPA = []
     PRICE = []
@@ -234,7 +208,6 @@ def plot_price_vs_v0():
     plt.plot(RHO, PRICE)
     plt.savefig("PRICE VS RHO")
     plt.close()
-
 
 # plot_price_vs_kappa()
 # plot_price_vs_n()

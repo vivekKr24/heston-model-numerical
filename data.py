@@ -2,7 +2,7 @@ from datetime import datetime
 import pandas as pd
 
 
-def get_data(symbol='HDFCBANKEQ', filename="OptionsData.xlsx"):
+def preprocess_data(symbol='HDFCBANKEQ', filename="OptionsData.xlsx"):
     df = pd.read_excel(filename)
     data_date = datetime(year=2023, month=8, day=19)
     df = df[(df['SYMBOL'] == symbol) & (df['VOLUME'] > 0) & (df['OPTION TYPE'] == 'CE')]
